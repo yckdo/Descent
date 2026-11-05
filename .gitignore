@@ -1,0 +1,30 @@
+
+# Environnement Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Données du manuel : conservation locale uniquement
+data/
+
+# Registres, audits et rapports locaux
+validation/
+
+# Fichiers accidentels
+*.pycd
+
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Fichiers système et éditeurs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
