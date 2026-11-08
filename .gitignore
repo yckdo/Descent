@@ -28,3 +28,8 @@ validation/
 Thumbs.db
 .vscode/
 .idea/
+
+# Sauvegardes intermédiaires du développement
+*.bak_*
+*.bak
+*.backup

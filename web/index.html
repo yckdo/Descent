@@ -1,0 +1,284 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>Descent V2 — Assistant de règles</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: #12151c;
+      color: #f4f4f5;
+    }
+
+    main {
+      max-width: 800px;
+      margin: 60px auto;
+      padding: 24px;
+    }
+
+    h1 {
+      color: #e0b76c;
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #a1a1aa;
+      margin-bottom: 36px;
+    }
+
+    .panel {
+      background: #1c202a;
+      border: 1px solid #333845;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+
+    textarea {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 110px;
+      padding: 14px;
+      background: #11141b;
+      color: white;
+      border: 1px solid #444b59;
+      border-radius: 8px;
+      font: inherit;
+      resize: vertical;
+    }
+
+    button {
+      background: #b88b45;
+      color: #111;
+      border: none;
+      border-radius: 8px;
+      padding: 13px 22px;
+      font-weight: bold;
+      font-size: 15px;
+      margin-top: 14px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #d8aa63;
+    }
+
+    .placeholder {
+      color: #a1a1aa;
+      line-height: 1.7;
+    }
+
+    footer {
+      color: #71717a;
+      font-size: 13px;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Descent V2</h1>
+    <p class="subtitle">
+      Assistant local des règles de
+      Descent: Journeys in the Dark — Seconde édition
+    </p>
+
+    <section class="panel">
+      <label for="question">
+        Quelle règle souhaites-tu consulter ?
+      </label>
+
+      <textarea
+        id="question"
+        placeholder="Exemple : Comment fonctionne le combat ?"
+      ></textarea>
+
+      <button type="button" id="ask-button">
+        Poser ma question
+      </button>
+    </section>
+
+    <section class="panel">
+      <h2>Réponse</h2>
+      <p class="placeholder" id="answer">
+        Les explications et leurs références au manuel
+        apparaîtront ici.
+      </p>
+    </section>
+
+    <footer>
+      Descent V2 — Docling · STAIR · Ollama
+      <p>
+        Prototype local. Les réponses doivent être
+        vérifiées à partir des règles officielles.
+      </p>
+
+  </main>
+
+  <script>
+    const questionInput = document.getElementById("question");
+    const askButton = document.getElementById("ask-button");
+    const answerArea = document.getElementById("answer");
+
+    async function askDescent() {
+      const question = questionInput.value.trim();
+
+      if (!question) {
+        answerArea.textContent = "Saisis une question sur les règles.";
+        return;
+      }
+
+      askButton.disabled = true;
+      askButton.textContent = "Recherche en cours...";
+      answerArea.textContent =
+        "STAIR recherche les règles et Ollama prépare la réponse...";
+
+      try {
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ question })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.detail || "Erreur du serveur."
+          );
+        }
+
+        answerArea.replaceChildren();
+
+        // Afficher l'origine de la réponse documentaire.
+        if (data.answer_origin) {
+          const origin = document.createElement("div");
+
+          origin.style.fontSize = "13px";
+          origin.style.fontWeight = "600";
+          origin.style.marginBottom = "18px";
+          origin.style.padding = "8px 12px";
+          origin.style.borderLeft = "3px solid #e0b76c";
+          origin.style.background = "#29251d";
+
+          if (data.answer_origin === "reviewed") {
+            origin.textContent =
+              "Réponse documentaire revue — scénario de référence";
+            origin.style.color = "#e0b76c";
+          } else if (data.answer_origin === "generated") {
+            origin.textContent =
+              "Réponse générée par Qwen3 à partir des sources STAIR";
+            origin.style.color = "#d4d4d8";
+          }
+
+          if (origin.textContent) {
+            answerArea.appendChild(origin);
+          }
+        }
+
+        if (!data.points || data.points.length === 0) {
+          answerArea.textContent =
+            data.message || "Aucune réponse documentaire disponible.";
+          return;
+        }
+
+        for (const point of data.points) {
+          const paragraph = document.createElement("p");
+          paragraph.textContent = point.text;
+          paragraph.style.lineHeight = "1.7";
+
+          const citation = document.createElement("small");
+          citation.textContent =
+            "Source : PDF p. " +
+            point.pdf_pages.join(", ") +
+            " | Extraits : " +
+            point.source_ids.join(", ");
+
+          citation.style.display = "block";
+          citation.style.color = "#e0b76c";
+          citation.style.marginBottom = "20px";
+
+          answerArea.append(paragraph, citation);
+        }
+
+        const note = document.createElement("small");
+        note.textContent =
+          "Citations contrôlées. Fidélité sémantique non garantie.";
+        note.style.color = "#a1a1aa";
+
+        answerArea.appendChild(note);
+
+        // Signaler les points documentaires à examiner.
+        const coverage = data.coverage_audit;
+
+        if (coverage && coverage.rules_flagged > 0) {
+          const warning = document.createElement("div");
+
+          warning.style.marginTop = "20px";
+          warning.style.padding = "14px";
+          warning.style.border = "1px solid #b88b45";
+          warning.style.borderRadius = "8px";
+          warning.style.background = "#28251d";
+
+          const title = document.createElement("strong");
+          title.textContent =
+            coverage.rules_flagged +
+            " règle(s) documentaire(s) à examiner";
+
+          title.style.color = "#e0b76c";
+          warning.appendChild(title);
+
+          const description = document.createElement("p");
+          description.textContent =
+            "Certaines informations présentes dans le " +
+            "manuel ne semblent pas entièrement reprises " +
+            "dans cette réponse.";
+
+          warning.appendChild(description);
+
+          const list = document.createElement("ul");
+
+          for (const check of coverage.checks) {
+            if (!check.signals_present) {
+              const item = document.createElement("li");
+              item.textContent = check.name;
+              list.appendChild(item);
+            }
+          }
+
+          warning.appendChild(list);
+          answerArea.appendChild(warning);
+        }
+
+      } catch (error) {
+        answerArea.textContent =
+          "Impossible d'obtenir une réponse : " + error.message;
+
+      } finally {
+        askButton.disabled = false;
+        askButton.textContent = "Poser ma question";
+      }
+    }
+
+    askButton.addEventListener("click", askDescent);
+  </script>
+</body>
+</html>
+    </footer>
