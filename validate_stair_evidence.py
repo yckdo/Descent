@@ -65,6 +65,8 @@ def audit_evidence(answer, evidence):
         sections = sorted({
             evidence_by_id[source_id]["section_id"]
             for source_id in valid_citations
+            if isinstance(evidence_by_id[source_id].get("section_id"), str)
+            and evidence_by_id[source_id]["section_id"]
         })
 
         results.append({
@@ -82,6 +84,8 @@ def audit_evidence(answer, evidence):
     cited_sections = sorted({
         evidence_by_id[source_id]["section_id"]
         for source_id in all_citations
+        if isinstance(evidence_by_id[source_id].get("section_id"), str)
+        and evidence_by_id[source_id]["section_id"]
     })
 
     available_sections = sorted({
