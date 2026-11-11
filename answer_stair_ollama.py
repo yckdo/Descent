@@ -141,6 +141,8 @@ def format_context(evidence):
 
 
 def call_ollama(question, context):
+    from descent_terminology import format_terminology
+
     system_prompt = """
 Tu es un assistant documentaire spécialisé dans les règles
 de Descent: Journeys in the Dark, Second Edition.
@@ -256,6 +258,13 @@ produis cinq points dans l'ordre officiel.
 Si les sources ne permettent pas de répondre :
 {"points": []}
 """.strip()
+
+    system_prompt += (
+        "\n\nTERMINOLOGIE FRANÇAISE CONTRÔLÉE\n"
+        "Utilise ces traductions lorsque les termes apparaissent "
+        "dans les sources, sans inventer de règles.\n"
+        + format_terminology()
+    )
 
     user_prompt = (
         f"QUESTION :\n{question}\n\n"
