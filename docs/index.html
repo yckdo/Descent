@@ -16,7 +16,7 @@
     <header><p>Descent: Journeys in the Dark — deuxième édition</p><h1>Assistant de règles · Bêta</h1><p class="notice">Version expérimentale : certaines réponses peuvent être erronées. Vérifie les pages du manuel avant de trancher une règle.</p></header>
     <section aria-labelledby="setup-title">
       <h2 id="setup-title">Accès testeur</h2>
-      <label for="api-url">Adresse HTTPS de l'API</label><input id="api-url" type="url" placeholder="https://api.exemple.fr" autocomplete="url" spellcheck="false"><p class="hint">L'adresse peut être préconfigurée par l'administrateur.</p>
+      <p class="hint">Entre le code reçu de l'organisateur pour poser tes questions. Aucune inscription nécessaire.</p>
       <label for="access-code">Code d'accès personnel</label><input id="access-code" type="password" autocomplete="off" placeholder="Code reçu pour les tests">
     </section>
     <section aria-labelledby="question-title">
@@ -34,10 +34,11 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  $('api-url').value = (window.DESCENT_API_URL || '').replace(/\/$/, '');
+
   let latest = null, lastQuestion = '';
   const send = async (endpoint, body) => {
-    const base = $('api-url').value.trim().replace(/\/$/, '');
+    const base = String(window.DESCENT_API_URL || '').trim().replace(/\/$/, '');
+    if (!base) throw new Error("Le serveur de test n'est pas configuré. Contacte l'organisateur.");
     if (!/^https:\/\//i.test(base) && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(base)) throw new Error('Indique une adresse API HTTPS valide.');
     const token = $('access-code').value.trim();
     if (!token) throw new Error('Saisis ton code testeur.');
