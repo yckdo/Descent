@@ -26,6 +26,9 @@ app = FastAPI(
     version="0.2.0",
 )
 
+from beta_feedback import install_beta_feedback
+install_beta_feedback(app)
+
 
 class QuestionRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)

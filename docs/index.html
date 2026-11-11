@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Descent V2 — Bêta testeurs</title>
+  <style>
+    :root {color-scheme:dark;--bg:#111821;--panel:#1d2834;--border:#364455;--text:#f3f5f7;--muted:#b2c0d0;--accent:#cda46a}
+    * {box-sizing:border-box}body{font:16px/1.6 system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0}main{max-width:800px;padding:36px 18px 80px;margin:auto}h1{margin:.1rem 0;font-size:clamp(1.9rem,4vw,2.7rem)}h2{font-size:1.15rem}header p,.hint{color:var(--muted)}section,.answer-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:22px;margin-top:22px}label{display:block;margin:.65rem 0 .25rem;font-weight:600}input,textarea{display:block;width:100%;font:inherit;color:var(--text);background:#131b25;border:1px solid #4b6076;border-radius:10px;padding:12px}textarea{resize:vertical;min-height:110px}button{font:inherit;border:1px solid var(--accent);background:var(--accent);color:#1b2025;font-weight:700;padding:11px 17px;border-radius:10px;cursor:pointer;margin-top:12px}button.secondary{background:transparent;color:var(--text)}button:disabled{opacity:.55;cursor:not-allowed}.answer-card{background:#151e28}.answer-card p{white-space:pre-wrap}.sources{color:var(--muted);font-size:.9rem}#status,#feedback-status{min-height:1.5em}#status[role=alert],#feedback-status[role=alert]{color:#ffd0ae}.notice{border-left:3px solid var(--accent);padding-left:12px}.hidden{display:none!important}a{color:var(--accent)}
+  </style>
+  <script src="config.js"></script>
+</head>
+<body>
+  <main>
+    <header><p>Descent: Journeys in the Dark — deuxième édition</p><h1>Assistant de règles · Bêta</h1><p class="notice">Version expérimentale : certaines réponses peuvent être erronées. Vérifie les pages du manuel avant de trancher une règle.</p></header>
+    <section aria-labelledby="setup-title">
+      <h2 id="setup-title">Accès testeur</h2>
+      <label for="api-url">Adresse HTTPS de l'API</label><input id="api-url" type="url" placeholder="https://api.exemple.fr" autocomplete="url" spellcheck="false"><p class="hint">L'adresse peut être préconfigurée par l'administrateur.</p>
+      <label for="access-code">Code d'accès personnel</label><input id="access-code" type="password" autocomplete="off" placeholder="Code reçu pour les tests">
+    </section>
+    <section aria-labelledby="question-title">
+      <h2 id="question-title">Poser une question</h2>
+      <form id="ask-form"><label for="question">Ta question sur les règles</label><textarea id="question" minlength="3" maxlength="1000" required placeholder="Un héros peut-il attaquer deux fois pendant son tour ?"></textarea><button id="ask-btn" type="submit">Demander à Descent V2</button></form>
+      <p id="status" aria-live="polite"></p>
+    </section>
+    <section id="answer-panel" class="hidden" aria-labelledby="answer-title"><h2 id="answer-title">Réponse</h2><div id="answers"></div>
+      <button id="report-btn" class="secondary" type="button">Signaler une réponse incorrecte</button>
+      <form id="feedback-form" class="hidden"><label for="feedback-comment">Que faudrait-il corriger ? (facultatif)</label><textarea id="feedback-comment" maxlength="1500" placeholder="Une condition manque, la page citée ne correspond pas…"></textarea><button id="feedback-btn" type="submit">Envoyer le signalement</button></form><p id="feedback-status" aria-live="polite"></p>
+    </section>
+    <p class="hint">Tes questions, les réponses signalées et tes commentaires sont enregistrés sur le serveur du projet lorsqu'un signalement est envoyé. N'y saisis pas de données personnelles.</p>
+  </main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  $('api-url').value = (window.DESCENT_API_URL || '').replace(/\/$/, '');
+  let latest = null, lastQuestion = '';
+  const send = async (endpoint, body) => {
+    const base = $('api-url').value.trim().replace(/\/$/, '');
+    if (!/^https:\/\//i.test(base) && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(base)) throw new Error('Indique une adresse API HTTPS valide.');
+    const token = $('access-code').value.trim();
+    if (!token) throw new Error('Saisis ton code testeur.');
+    const response = await fetch(base + endpoint, {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body),mode:'cors',cache:'no-store'});
+    let data = null;
+    try {data = await response.json()} catch (_e) {}
+    if (!response.ok) throw new Error(data?.detail || `Erreur HTTP ${response.status}`);
+    return data;
+  };
+  $('ask-form').addEventListener('submit', async e => {
+    e.preventDefault();latest = null;$('answer-panel').classList.add('hidden');$('ask-btn').disabled=true;
+    lastQuestion=$('question').value.trim();$('status').textContent='Recherche dans le manuel en cours…';
+    try {
+      const data=await send('/api/ask',{question:lastQuestion});
+      if (data.status !== 'ok' || !Array.isArray(data.points) || !data.points.length) throw new Error('Aucune réponse exploitable.');
+      latest = data;$('answers').replaceChildren();
+      data.points.forEach((point,i) => {
+        const card=document.createElement('article');card.className='answer-card';
+        const p=document.createElement('p');p.textContent=point.text || `Point ${i+1} vide`;
+        const s=document.createElement('div');s.className='sources';const pages=point.pdf_pages || [];
+        s.textContent='Pages PDF : '+(pages.length ? pages.join(', ') : 'non disponibles');
+        card.append(p,s);$('answers').append(card);
+      });
+      $('feedback-form').classList.add('hidden');$('feedback-comment').value='';$('feedback-status').textContent='';$('report-btn').disabled=false;
+      $('answer-panel').classList.remove('hidden');$('status').textContent='Réponse produite. Vérifie les références.';
+    } catch (error) {$('status').textContent=error.message || 'Erreur de connexion.'}
+    finally {$('ask-btn').disabled=false}
+  });
+  $('report-btn').addEventListener('click',()=>{$('feedback-form').classList.remove('hidden');$('feedback-comment').focus()});
+  $('feedback-form').addEventListener('submit',async e=>{
+    e.preventDefault();if(!latest)return;
+    $('feedback-btn').disabled=true;$('feedback-status').textContent='Envoi du signalement…';
+    try {await send('/api/feedback',{verdict:'incorrect',question:lastQuestion,answer:latest,comment:$('feedback-comment').value.trim()});
+      $('feedback-status').textContent='Merci, signalement enregistré.';$('feedback-form').classList.add('hidden');$('report-btn').disabled=true;
+    }catch(error){ $('feedback-status').textContent=error.message || 'Échec du signalement.' }
+    finally{$('feedback-btn').disabled=false}
+  });
+})();
+</script>
+</body>
+</html>
