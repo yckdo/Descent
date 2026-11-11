@@ -12,7 +12,8 @@ from answer_stair_ollama import (
     validate_answer,
 )
 from validate_stair_evidence import audit_evidence
-from reviewed_stair_answers import get_reviewed_answer
+from reviewed_stair_answers import get_reviewed_answer, normalize_question
+from prepare_stair_open_chat import prepare_open_chat
 from audit_stair_generic import audit_capture, load_json
 
 
@@ -58,7 +59,21 @@ def ask(request: QuestionRequest):
         )
 
     try:
-        data = prepare_evidence(question)
+        # Préserver le parcours V1 pour la réponse
+        # Boutique révisée et ses citations stables.
+        reviewed_candidate = (
+            normalize_question(question)
+            == normalize_question(
+                "Comment fonctionne la boutique ?"
+            )
+        )
+
+        if reviewed_candidate:
+            data = prepare_evidence(question)
+            open_chat = False
+        else:
+            data = prepare_open_chat(question)
+            open_chat = True
 
         if data is None or not data["evidence"]:
             return {
@@ -83,7 +98,11 @@ def ask(request: QuestionRequest):
             answer = reviewed_answer
             answer_origin = "reviewed"
         else:
-            context = format_context(evidence)
+            context = (
+                data["context"]
+                if open_chat
+                else format_context(evidence)
+            )
             answer = call_ollama(question, context)
             answer_origin = "generated"
 
@@ -159,7 +178,7 @@ def ask(request: QuestionRequest):
         # scénario Boutique dispose d'un référentiel.
         coverage = None
 
-        if data["selected"]["id"] == "sec_0126":
+        if (not open_chat and data["selected"] and data["selected"]["id"] == "sec_0126"):
             reference_path = (
                 ROOT / "validation/rule_checks/boutique.json"
             )
@@ -187,8 +206,10 @@ def ask(request: QuestionRequest):
             ]
 
             pages = sorted({
-                source["page"]
+                int(source["page"])
                 for source in references
+                if source.get("page") is not None
+                and str(source["page"]).strip().isdigit()
             })
 
             points.append({

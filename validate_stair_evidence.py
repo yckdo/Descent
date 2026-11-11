@@ -87,6 +87,8 @@ def audit_evidence(answer, evidence):
     available_sections = sorted({
         item["section_id"]
         for item in evidence
+        if isinstance(item.get("section_id"), str)
+        and item["section_id"]
     })
 
     errors = []

@@ -24,7 +24,7 @@ STRUCTURE_PATH = ROOT / "data/stair/document_structure.json"
 LINKS_PATH = ROOT / "data/stair/cross_page_links.json"
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
-MODEL = "qwen3:8b"
+MODEL = "qwen2.5-coder:14b"
 
 MAX_CONTEXT_CHARS = 30000
 
@@ -155,6 +155,63 @@ PRIORITÉ ABSOLUE : FIDÉLITÉ AUX SOURCES
    d'application des règles.
 4. Si une information manque, ne la complète pas de mémoire.
 5. Utilise un vocabulaire français clair et précis.
+
+CONDITIONS D'APPLICATION DES RÈGLES
+
+Avant de rédiger chaque affirmation, vérifie :
+- À quel personnage, objet ou acteur la règle s'applique.
+- Dans quelle situation la règle est applicable.
+- S'il s'agit d'une règle générale ou d'une exception.
+- Si les restrictions citées concernent réellement la question.
+
+N'étends jamais une restriction particulière à une règle générale.
+Ne transpose jamais une restriction d'un type de personnage
+ou d'objet à un autre sans justification explicite.
+
+Réponds directement à la question posée.
+Présente séparément les exceptions utiles en précisant
+leurs conditions d'application.
+N'ajoute pas de procédure détaillée si elle n'est pas demandée.
+
+PRIORITÉ AUX CONDITIONS ESSENTIELLES
+
+Avant de finaliser la réponse :
+- Identifie la conclusion qui répond directement à la question.
+- Identifie les conditions nécessaires pour que cette
+  conclusion soit vraie : cible autorisée, équipement,
+  portée, position, visibilité, quantité, moment ou
+  restriction, uniquement si elles sont documentées
+  et applicables à la question.
+- Mentionne explicitement ces conditions lorsqu'elles
+  sont indispensables à la validité de la réponse.
+- Vérifie que chaque condition importante présente
+  dans les sources pertinentes figure dans la réponse.
+- Écarte les mécanismes secondaires non demandés.
+
+Pour une question demandant si une action est possible,
+privilégie la réponse et ses conditions d'application
+plutôt que les étapes de résolution de cette action.
+
+Ne déduis aucune condition absente des sources.
+Ne transpose aucune restriction entre acteurs.
+
+PERTINENCE DE LA RÉPONSE
+
+Réponds directement à la question posée.
+
+Avant d'inclure un point, vérifie :
+- Qu'il répond directement à la question ou qu'il est
+  indispensable pour comprendre la réponse.
+- Que sa source justifie précisément l'affirmation.
+- Que le lien avec la situation décrite est établi.
+
+N'ajoute pas de règles simplement liées au même thème.
+Ne présente pas un mécanisme indépendant comme une
+conséquence de la situation décrite.
+
+Pour une question simple, privilégie une réponse concise.
+Pour une demande de procédure, conserve toutes les étapes
+officielles nécessaires, dans leur ordre.
 
 EXPLICATION DES PROCÉDURES
 
