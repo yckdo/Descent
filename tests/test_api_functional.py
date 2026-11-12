@@ -1,7 +1,14 @@
 import unittest
+import hashlib
+import os
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from web_app import app
+
+
+TEST_TOKEN = "descent-test-only-token"
+TEST_HASH = hashlib.sha256(TEST_TOKEN.encode()).hexdigest()
 
 
 class TestAPIFunctional(unittest.TestCase):
@@ -16,10 +23,15 @@ class TestAPIFunctional(unittest.TestCase):
         cls.client.__exit__(None, None, None)
 
     def check_answer(self, question, expected_origin):
-        response = self.client.post(
-            "/api/ask",
-            json={"question": question},
-        )
+        with patch.dict(os.environ, {
+            "DESCENT_BETA_REQUIRE_AUTH": "1",
+            "DESCENT_BETA_TOKEN_HASHES": TEST_HASH,
+        }):
+            response = self.client.post(
+                "/api/ask",
+                json={"question": question},
+                headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+            )
 
         self.assertEqual(
             response.status_code,
