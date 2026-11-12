@@ -36,5 +36,40 @@ class BetaFeedbackTests(unittest.TestCase):
                     self.assertEqual(preflight.headers.get("access-control-allow-origin"), "https://yckdo.github.io")
 
 
+    def test_public_mode_without_code_and_rate_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                "DESCENT_BETA_REQUIRE_AUTH": "0",
+                "DESCENT_BETA_TOKEN_HASHES": "",
+                "DESCENT_BETA_FEEDBACK_DB": str(Path(tmp) / "feedback.sqlite3"),
+            }
+            with patch.dict(os.environ, env):
+                app = FastAPI()
+                install_beta_feedback(app)
+                with TestClient(app) as client:
+                    body = {
+                        "verdict": "incorrect",
+                        "question": "Quelle est cette règle ?",
+                        "answer": {"points": [{"text": "Test", "source_ids": ["S001"]}]},
+                        "comment": "Essai public",
+                    }
+                    response = client.post("/api/feedback", json=body)
+                    self.assertEqual(response.status_code, 201, response.text)
+                    self.assertEqual(response.json()["status"], "recorded")
+                    with sqlite3.connect(env["DESCENT_BETA_FEEDBACK_DB"]) as db:
+                        count = db.execute("SELECT COUNT(*) FROM incorrect_feedback").fetchone()[0]
+                    self.assertEqual(count, 1)
+
+                    @app.post("/api/test-does-not-exist")
+                    def other():
+                        return {"ok": True}
+
+                    for _ in range(11):
+                        client.post("/api/feedback", json=body)
+                    limited = client.post("/api/feedback", json=body)
+                    self.assertEqual(limited.status_code, 429, limited.text)
+
+
+
 if __name__ == "__main__":
     unittest.main()
