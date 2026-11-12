@@ -14,11 +14,6 @@
 <body>
   <main>
     <header><p>Descent: Journeys in the Dark — deuxième édition</p><h1>Assistant de règles · Bêta</h1><p class="notice">Version expérimentale : certaines réponses peuvent être erronées. Vérifie les pages du manuel avant de trancher une règle.</p></header>
-    <section aria-labelledby="setup-title">
-      <h2 id="setup-title">Accès testeur</h2>
-      <p class="hint">Entre le code reçu de l'organisateur pour poser tes questions. Aucune inscription nécessaire.</p>
-      <label for="access-code">Code d'accès personnel</label><input id="access-code" type="password" autocomplete="off" placeholder="Code reçu pour les tests">
-    </section>
     <section aria-labelledby="question-title">
       <h2 id="question-title">Poser une question</h2>
       <form id="ask-form"><label for="question">Ta question sur les règles</label><textarea id="question" minlength="3" maxlength="1000" required placeholder="Un héros peut-il attaquer deux fois pendant son tour ?"></textarea><button id="ask-btn" type="submit">Demander à Descent V2</button></form>
@@ -40,9 +35,7 @@
     const base = String(window.DESCENT_API_URL || '').trim().replace(/\/$/, '');
     if (!base) throw new Error("Le serveur de test n'est pas configuré. Contacte l'organisateur.");
     if (!/^https:\/\//i.test(base) && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(base)) throw new Error('Indique une adresse API HTTPS valide.');
-    const token = $('access-code').value.trim();
-    if (!token) throw new Error('Saisis ton code testeur.');
-    const response = await fetch(base + endpoint, {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body),mode:'cors',cache:'no-store'});
+    const response = await fetch(base + endpoint, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),mode:'cors',cache:'no-store'});
     let data = null;
     try {data = await response.json()} catch (_e) {}
     if (!response.ok) throw new Error(data?.detail || `Erreur HTTP ${response.status}`);
