@@ -1,7 +1,8 @@
 """Collecte des signalements pour Descent V2 (stockage SQLite local).
 
-Pour exposition publique, activer DESCENT_BETA_REQUIRE_AUTH=1 et fournir
-DESCENT_BETA_TOKEN_HASHES (SHA-256 hexadécimaux, séparés par des virgules).
+Mode privé par défaut : DESCENT_BETA_REQUIRE_AUTH=1 avec
+DESCENT_BETA_TOKEN_HASHES. Mode libre explicite : DESCENT_BETA_REQUIRE_AUTH=0.
+Le mode libre conserve les limites de fréquence et de concurrence.
 Aucun secret ne doit être embarqué dans GitHub Pages.
 """
 
@@ -28,6 +29,7 @@ router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent
 _LIMIT_LOCK = threading.Lock()
 _LIMIT: dict[str, list[float]] = {}
+_ASK_SLOTS = threading.BoundedSemaphore(value=2)
 
 
 class IncorrectFeedback(BaseModel):
@@ -92,9 +94,10 @@ def _authorized(request: Request) -> tuple[bool, str]:
     return valid, digest
 
 
-def _limited(key: str, path: str) -> bool:
+def _limited(key: str, path: str, limit: int | None = None) -> bool:
     now = time.monotonic()
-    limit = 12 if path == "/api/ask" else 30
+    if limit is None:
+        limit = 12 if path == "/api/ask" else 30
     identifier = f"{key}:{path}"
     with _LIMIT_LOCK:
         timestamps = [v for v in _LIMIT.get(identifier, ()) if now - v < 60]
@@ -125,15 +128,41 @@ def install_beta_feedback(app: FastAPI) -> None:
 
     @app.middleware("http")
     async def _beta_access(request: Request, call_next):
-        if request.method != "OPTIONS" and request.url.path in ("/api/ask", "/api/feedback"):
-            if os.environ.get("DESCENT_BETA_REQUIRE_AUTH") == "1":
-                if not os.environ.get("DESCENT_BETA_TOKEN_HASHES", "").strip():
-                    return JSONResponse({"detail": "Accès bêta non configuré."}, status_code=503)
-                ok, identity = _authorized(request)
-                if not ok:
-                    return JSONResponse({"detail": "Code testeur invalide."}, status_code=401)
-                if _limited(identity, request.url.path):
-                    return JSONResponse({"detail": "Trop de demandes. Réessaie dans une minute."}, status_code=429)
-        return await call_next(request)
+        endpoint = request.url.path
+        guarded = request.method != "OPTIONS" and endpoint in ("/api/ask", "/api/feedback")
+        if not guarded:
+            return await call_next(request)
+
+        # Par défaut, l'API reste fermée sans configuration explicite.
+        if os.environ.get("DESCENT_BETA_REQUIRE_AUTH") != "0":
+            if not os.environ.get("DESCENT_BETA_TOKEN_HASHES", "").strip():
+                return JSONResponse({"detail": "Accès bêta non configuré."}, status_code=503)
+            ok, identity = _authorized(request)
+            if not ok:
+                return JSONResponse({"detail": "Code testeur invalide."}, status_code=401)
+            if _limited(identity, endpoint):
+                return JSONResponse({"detail": "Trop de demandes. Réessaie dans une minute."}, status_code=429)
+        else:
+            # Lien ouvert à tous : limiter la charge globale ET par visiteur.
+            # CF-Connecting-IP est défini par Cloudflare pour les visiteurs du tunnel.
+            client_ip = request.headers.get("CF-Connecting-IP") or (
+                request.client.host if request.client else "unknown"
+            )
+            max_global = 20 if endpoint == "/api/ask" else 60
+            max_client = 6 if endpoint == "/api/ask" else 12
+            if _limited("public-global", endpoint, limit=max_global) or _limited(
+                f"public-ip:{client_ip}", endpoint, limit=max_client
+            ):
+                return JSONResponse({"detail": "Trop de demandes. Réessaie dans une minute."}, status_code=429)
+
+        # Éviter qu'un groupe de requêtes simultanées sature Qwen local.
+        need_slot = endpoint == "/api/ask"
+        if need_slot and not _ASK_SLOTS.acquire(blocking=False):
+            return JSONResponse({"detail": "Serveur occupé. Réessaie dans un instant."}, status_code=429)
+        try:
+            return await call_next(request)
+        finally:
+            if need_slot:
+                _ASK_SLOTS.release()
 
     app.include_router(router)
