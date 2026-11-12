@@ -60,10 +60,6 @@ class BetaFeedbackTests(unittest.TestCase):
                         count = db.execute("SELECT COUNT(*) FROM incorrect_feedback").fetchone()[0]
                     self.assertEqual(count, 1)
 
-                    @app.post("/api/test-does-not-exist")
-                    def other():
-                        return {"ok": True}
-
                     for _ in range(11):
                         client.post("/api/feedback", json=body)
                     limited = client.post("/api/feedback", json=body)
