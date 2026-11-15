@@ -76,7 +76,13 @@ def extract_two_stage(evidence, *, caller=None):
                   "stage2_returned": 0,
                   "stage2_accepted": 0,
                   "stage2_rejected": 0,
-                  "semantically_verified": False}
+                  "semantically_verified": False,
+                  "stage2_rejection_reasons": {"unanchored_quote": 0, "invalid_structure_or_provenance": 0},
+                  "stage1_unrepresented_count": 0,
+                  "stage1_unrepresented_indices": [],
+                  "stage1_unrepresented_kinds": [],
+                  "coverage_basis": "exact_quote_identity_only",
+                  "review_required": True}
     if not valid:
         return {"status": "stage1_empty_or_invalid", "diagnostic": diagnostic, "candidates": []}
     second = [
@@ -87,7 +93,7 @@ def extract_two_stage(evidence, *, caller=None):
             "evidence_id, quote. Reuse the EXACT evidence_id and quote from the input. "
             "Do not introduce implications not stated. If not representable, omit the rule."
         )},
-        {"role": "user", "content": __import__("json").dumps(valid, ensure_ascii=False)}
+        {"role": "user", "content": json.dumps(valid, ensure_ascii=False)}
     ]
     raw_rules = call(second, RULE_RESPONSE_SCHEMA, "rules")
     if not isinstance(raw_rules, dict) or not isinstance(raw_rules.get("rules"), list):
@@ -95,12 +101,27 @@ def extract_two_stage(evidence, *, caller=None):
     diagnostic["stage2_returned"] = len(raw_rules["rules"])
     # The second model output must not be able to invent a quote from unrelated evidence.
     anchors = {(v["evidence_id"], v["quote"]) for v in valid}
-    anchored = [rule for rule in raw_rules["rules"]
-                if isinstance(rule, dict)
-                and (rule.get("evidence_id"), rule.get("quote")) in anchors]
+    anchored = []
+    diagnostics_by_reason = {"unanchored_quote": 0, "invalid_structure_or_provenance": 0}
+    for rule in raw_rules["rules"]:
+        if not isinstance(rule, dict) or not isinstance(rule.get("evidence_id"), str) or not isinstance(rule.get("quote"), str) or (rule["evidence_id"], rule["quote"]) not in anchors:
+            diagnostics_by_reason["unanchored_quote"] += 1
+            continue
+        anchored.append(rule)
     validated = validate_candidates({"rules": anchored}, evidence)
+    diagnostics_by_reason["invalid_structure_or_provenance"] = validated["rejected_count"]
     diagnostic["stage2_accepted"] = validated["candidate_count"]
     diagnostic["stage2_rejected"] = diagnostic["stage2_returned"] - validated["candidate_count"]
+    diagnostic["stage2_rejection_reasons"] = diagnostics_by_reason
+    # This checks quote identity only: it does NOT establish semantic coverage.
+    covered = {(r["source"], r["quote"]) for r in validated["candidates"]}
+    missing = [i for i, statement in enumerate(valid, 1)
+               if (statement["evidence_id"], statement["quote"]) not in covered]
+    diagnostic["stage1_unrepresented_count"] = len(missing)
+    diagnostic["stage1_unrepresented_indices"] = missing
+    diagnostic["stage1_unrepresented_kinds"] = [valid[i - 1]["kind"] for i in missing]
+    diagnostic["coverage_basis"] = "exact_quote_identity_only"
+    diagnostic["review_required"] = True
     return {"status": "candidates_only", "diagnostic": diagnostic,
             "candidates": validated["candidates"]}
 
