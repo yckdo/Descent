@@ -15,7 +15,32 @@ MAX_EVIDENCE = 6
 MAX_TEXT = 1800
 MAX_PROPOSALS = 12
 LITERAL = re.compile(r"!?[a-z][a-z0-9_]{0,79}\Z")
-ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
+ID = re.compile(r"[A-Za-z0-9_-]{1,80}\\Z")
+
+RULE_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rules": {
+            "type": "array",
+            "maxItems": MAX_PROPOSALS,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "if": {"type": "array", "items": {"type": "string"}},
+                    "then": {"type": "string"},
+                    "evidence_id": {"type": "string"},
+                    "quote": {"type": "string"},
+                },
+                "required": ["id", "if", "then", "evidence_id", "quote"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["rules"],
+    "additionalProperties": False,
+}
+
 
 
 def validate_candidates(payload, evidence):
@@ -79,7 +104,7 @@ def _local_ollama(messages, *, url, model, timeout):
     request = urllib.request.Request(
         url, method="POST", headers={"Content-Type": "application/json"},
         data=json.dumps({
-            "model": model, "stream": False, "think": False, "format": "json",
+            "model": model, "stream": False, "think": False, "format": RULE_RESPONSE_SCHEMA,
             "options": {"temperature": 0, "num_predict": 1200},
             "messages": messages,
         }).encode("utf-8"),
@@ -93,7 +118,10 @@ def _local_ollama(messages, *, url, model, timeout):
     data = json.loads(body)
     if data.get("done_reason") == "length":
         raise ValueError("Truncated response")
-    return json.loads(data["message"]["content"])
+    parsed = json.loads(data["message"]["content"])
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("rules"), list):
+        raise ValueError("Ollama returned invalid extraction schema (rules list missing)")
+    return parsed
 
 
 def propose_candidates(evidence, *, generator=None):
@@ -128,6 +156,8 @@ def propose_candidates(evidence, *, generator=None):
             timeout=15)
     else:
         payload = generator(messages)
+    if not isinstance(payload, dict) or not isinstance(payload.get("rules"), list):
+        raise ValueError("Ollama returned invalid extraction schema (rules list missing)")
     return validate_candidates(payload, evidence)
 
 
