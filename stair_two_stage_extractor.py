@@ -1,6 +1,7 @@
 """Experimental two-stage STAIR extraction. Never approves Qwen-proposed rules."""
 from __future__ import annotations
 import os
+import json
 from stair_rule_extractor import (
     _local_ollama, RULE_RESPONSE_SCHEMA, validate_candidates
 )
@@ -52,7 +53,7 @@ def extract_two_stage(evidence, *, caller=None):
             "a short English interpretation and a kind. Preserve negation and scope. "
             "No unstated assumptions. If none, output an empty statements list."
         )},
-        {"role": "user", "content": __import__("json").dumps(passages, ensure_ascii=False)}
+        {"role": "user", "content": json.dumps(passages, ensure_ascii=False)}
     ]
     raw = call(messages, STATEMENT_SCHEMA, "statements")
     if not isinstance(raw, dict) or not isinstance(raw.get("statements"), list):
@@ -63,7 +64,7 @@ def extract_two_stage(evidence, *, caller=None):
             continue
         sid, quote = item.get("evidence_id"), item.get("quote")
         interpretation = item.get("interpretation")
-        if (sid in lookup and isinstance(quote, str)
+        if (isinstance(sid, str) and sid in lookup and isinstance(quote, str)
                 and 12 <= len(quote) <= 800
                 and quote in lookup[sid].get("text", "")
                 and isinstance(interpretation, str) and interpretation.strip()
@@ -102,3 +103,30 @@ def extract_two_stage(evidence, *, caller=None):
     diagnostic["stage2_rejected"] = diagnostic["stage2_returned"] - validated["candidate_count"]
     return {"status": "candidates_only", "diagnostic": diagnostic,
             "candidates": validated["candidates"]}
+
+
+def main():
+    import argparse
+    from pathlib import Path
+    parser = argparse.ArgumentParser(description="Local-only STAIR two-stage extraction diagnostic")
+    parser.add_argument("draft", type=Path)
+    parser.add_argument("--source", default="S002")
+    args = parser.parse_args()
+    if args.draft.stat().st_size > 2_000_000:
+        parser.error("Draft exceeds 2 MB")
+    case = json.loads(args.draft.read_text(encoding="utf-8"))
+    evidence = [e for e in case["evidence"] if e["id"] == args.source]
+    if len(evidence) != 1:
+        parser.error("Expected exactly one matching STAIR source")
+    result = extract_two_stage(evidence)
+    # No protected passages or quotes in stdout.
+    print(json.dumps({"status": result["status"], "diagnostic": result["diagnostic"],
+                      "rule_atoms": [{"if": r["if"], "then": r["then"],
+                                      "source": r["source"]}
+                                     for r in result["candidates"]],
+                      "automatic_approval": False},
+                     ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
