@@ -8,6 +8,8 @@ on:
       - 'stair_reasoner.py'
       - 'stair_shadow.py'
       - 'test_stair_reasoning.py'
+      - 'stair_rule_extractor.py'
+      - 'test_stair_rule_extractor.py'
       - '.github/workflows/stair-shadow-tests.yml'
 jobs:
   unit-tests:
@@ -19,5 +21,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m unittest -v test_stair_reasoning
+      - run: python -m unittest -v test_stair_reasoning test_stair_rule_extractor
+      - run: python -m py_compile stair_reasoner.py stair_shadow.py stair_rule_extractor.py web_app.py
       - run: python stair_shadow.py stair_shadow_example.json --enable
