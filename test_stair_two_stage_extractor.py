@@ -47,6 +47,39 @@ class TwoStageTests(unittest.TestCase):
         self.assertEqual(result["diagnostic"]["stage2_accepted"], 0)
         self.assertEqual(result["diagnostic"]["stage2_rejected"], 1)
 
+    def test_missing_permission_is_flagged(self):
+        second = {"evidence_id": "S002",
+                  "quote": "A figure cannot end movement in another figure's space.",
+                  "interpretation": "Cannot end on another figure",
+                  "kind": "prohibition"}
+        def fake(messages, schema, key):
+            if key == "statements":
+                return {"statements": [STATEMENT, second]}
+            return {"rules": [RULE]}
+        result = extract_two_stage(E, caller=fake)
+        self.assertEqual(result["diagnostic"]["stage1_unrepresented_count"], 1)
+        self.assertEqual(result["diagnostic"]["stage1_unrepresented_indices"], [2])
+        self.assertEqual(result["diagnostic"]["stage1_unrepresented_kinds"], ["prohibition"])
+        self.assertEqual(result["diagnostic"]["coverage_basis"], "exact_quote_identity_only")
+        self.assertTrue(result["diagnostic"]["review_required"])
+
+    def test_rejection_reason_invalid_atoms(self):
+        def fake(messages, schema, key):
+            if key == "statements":
+                return {"statements": [STATEMENT]}
+            return {"rules": [dict(RULE, then="not a valid atom")]}
+        result = extract_two_stage(E, caller=fake)
+        self.assertEqual(result["diagnostic"]["stage2_rejection_reasons"]["invalid_structure_or_provenance"], 1)
+        self.assertEqual(result["diagnostic"]["stage1_unrepresented_count"], 1)
+
+    def test_unanchored_rule_reason(self):
+        def fake(messages, schema, key):
+            if key == "statements":
+                return {"statements": [STATEMENT]}
+            return {"rules": [dict(RULE, quote="Invented quote in second step")]}
+        result = extract_two_stage(E, caller=fake)
+        self.assertEqual(result["diagnostic"]["stage2_rejection_reasons"]["unanchored_quote"], 1)
+
     def test_stage_one_malformed(self):
         with self.assertRaises(ValueError):
             extract_two_stage(E, caller=lambda *args: {})
