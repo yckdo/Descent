@@ -1,0 +1,23 @@
+name: STAIR shadow unit tests
+on:
+  push:
+    branches:
+      - feature/stair-reasoning-integration
+  pull_request:
+    paths:
+      - 'stair_reasoner.py'
+      - 'stair_shadow.py'
+      - 'test_stair_reasoning.py'
+      - '.github/workflows/stair-shadow-tests.yml'
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest -v test_stair_reasoning
+      - run: python stair_shadow.py stair_shadow_example.json --enable
