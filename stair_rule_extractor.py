@@ -9,6 +9,8 @@ import os
 import re
 import urllib.request
 
+from stair_fidelity_gate import triage_candidates
+
 MAX_EVIDENCE = 6
 MAX_TEXT = 1800
 MAX_PROPOSALS = 12
@@ -137,9 +139,12 @@ def observe_extraction(evidence, *, extraction_enabled=None, generator=None):
         return {"status": "disabled"}
     try:
         result = propose_candidates(evidence, generator=generator)
-        return {"status": result["status"],
+        review = triage_candidates(result["candidates"], evidence)
+        return {"status": "review_required" if result["candidate_count"] else result["status"],
                 "candidate_count": result["candidate_count"],
                 "rejected_count": result["rejected_count"],
+                "blocked_count": review["blocked_count"],
+                "needs_review_count": review["needs_review_count"],
                 "semantically_verified": False}
     except Exception:
         return {"status": "error", "candidate_count": 0, "semantically_verified": False}
