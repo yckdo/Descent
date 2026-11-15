@@ -98,13 +98,13 @@ def validate_candidates(payload, evidence):
     }
 
 
-def _local_ollama(messages, *, url, model, timeout):
+def _local_ollama(messages, *, url, model, timeout, schema=None, required_key="rules"):
     if url != "http://127.0.0.1:11434/api/chat":
         raise ValueError("Only local loopback Ollama is permitted")
     request = urllib.request.Request(
         url, method="POST", headers={"Content-Type": "application/json"},
         data=json.dumps({
-            "model": model, "stream": False, "think": False, "format": RULE_RESPONSE_SCHEMA,
+            "model": model, "stream": False, "think": False, "format": RULE_RESPONSE_SCHEMA if schema is None else schema,
             "options": {"temperature": 0, "num_predict": 1200},
             "messages": messages,
         }).encode("utf-8"),
@@ -119,8 +119,8 @@ def _local_ollama(messages, *, url, model, timeout):
     if data.get("done_reason") == "length":
         raise ValueError("Truncated response")
     parsed = json.loads(data["message"]["content"])
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("rules"), list):
-        raise ValueError("Ollama returned invalid extraction schema (rules list missing)")
+    if not isinstance(parsed, dict) or not isinstance(parsed.get(required_key), list):
+        raise ValueError(f"Ollama returned invalid extraction schema ({required_key} list missing)")
     return parsed
 
 
