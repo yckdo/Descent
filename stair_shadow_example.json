@@ -1,0 +1,22 @@
+{
+  "rag_response": "Réponse RAG inchangée (exemple fictif).",
+  "reasoning_spec": {
+    "facts": [
+      {
+        "literal": "hero_poisoned",
+        "source": "synthetic:f1"
+      }
+    ],
+    "rules": [
+      {
+        "id": "synthetic:r1",
+        "if": [
+          "hero_poisoned"
+        ],
+        "then": "requires_rule_check",
+        "source": "synthetic:r1"
+      }
+    ],
+    "query": "requires_rule_check"
+  }
+}
