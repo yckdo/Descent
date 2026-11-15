@@ -15,7 +15,7 @@ MAX_EVIDENCE = 6
 MAX_TEXT = 1800
 MAX_PROPOSALS = 12
 LITERAL = re.compile(r"!?[a-z][a-z0-9_]{0,79}\Z")
-ID = re.compile(r"[A-Za-z0-9_-]{1,80}\\Z")
+ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 
 RULE_RESPONSE_SCHEMA = {
     "type": "object",
