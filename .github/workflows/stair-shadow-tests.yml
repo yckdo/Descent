@@ -18,6 +18,7 @@ on:
       - 'test_prepare_stair_gold_drafts.py'
       - 'evaluate_stair_s002.py'
       - 'test_evaluate_stair_s002.py'
+      - 'test_stair_ollama_schema.py'
       - '.github/workflows/stair-shadow-tests.yml'
 jobs:
   unit-tests:
@@ -29,6 +30,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m unittest -v test_stair_reasoning test_stair_rule_extractor test_stair_fidelity_gate test_stair_semantic_benchmark test_prepare_stair_gold_drafts test_evaluate_stair_s002
+      - run: python -m unittest -v test_stair_reasoning test_stair_rule_extractor test_stair_fidelity_gate test_stair_semantic_benchmark test_prepare_stair_gold_drafts test_evaluate_stair_s002 test_stair_ollama_schema
       - run: python -m py_compile stair_reasoner.py stair_shadow.py stair_rule_extractor.py stair_fidelity_gate.py stair_semantic_benchmark.py prepare_stair_gold_drafts.py evaluate_stair_s002.py web_app.py
       - run: python stair_shadow.py stair_shadow_example.json --enable
