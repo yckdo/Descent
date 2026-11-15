@@ -35,8 +35,8 @@ def evaluate_case(case):
         raise ValueError("Evidence and gold_rules must be lists")
     if not case.get("case_id") or not isinstance(case["case_id"], str):
         raise ValueError("Missing case_id")
-    if case.get("annotation_status") != "human_reviewed":
-        raise ValueError("Gold data must be explicitly human reviewed")
+    if case.get("annotation_status") not in ("synthetic_reference", "human_reviewed"):
+        raise ValueError("Gold must be synthetic reference or explicitly human reviewed")
     if not case.get("reviewer") or not isinstance(case["reviewer"], str):
         raise ValueError("Reviewer required")
     if not isinstance(case.get("evidence_hashes"), dict):
@@ -78,7 +78,7 @@ def evaluate_case(case):
     matches = len(candidate_signatures & gold_signatures)
     return {
         "case_id": case["case_id"],
-        "annotation_status": "human_reviewed",
+        "annotation_status": case["annotation_status"],
         "matched": matches,
         "false_positive": len(candidate_signatures - gold_signatures),
         "false_negative": len(gold_signatures - candidate_signatures),
