@@ -154,10 +154,17 @@ def extract_two_stage(evidence, *, caller=None):
 
     # Validate as a batch to preserve duplicate rule-ID detection.
     validated = validate_candidates({"rules": [rule for _, rule in candidate_rules]}, evidence)
-    accepted_rule_ids = {r["id"] for r in validated["candidates"]}
+    remaining = list(validated["candidates"])
     for statement_id, rule in candidate_rules:
-        if rule["id"] in accepted_rule_ids:
-            accepted_ids.add(statement_id)
+        for index, accepted in enumerate(remaining):
+            if (accepted["id"] == rule["id"]
+                    and accepted["source"] == rule["evidence_id"]
+                    and accepted["quote"] == rule["quote"]
+                    and accepted["if"] == rule["if"]
+                    and accepted["then"] == rule["then"]):
+                accepted_ids.add(statement_id)
+                remaining.pop(index)
+                break
     reasons["invalid_structure_or_provenance"] = validated["rejected_count"]
     diagnostic["stage2_accepted"] = validated["candidate_count"]
     diagnostic["stage2_rejected"] = diagnostic["stage2_returned"] - validated["candidate_count"]
