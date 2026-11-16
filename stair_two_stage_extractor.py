@@ -1,10 +1,10 @@
-"""Experimental two-stage STAIR extraction. Never approves Qwen-proposed rules."""
+"""Experimental two-stage STAIR extraction. Candidate rules are NEVER automatically approved."""
 from __future__ import annotations
-import os
+
 import json
-from stair_rule_extractor import (
-    _local_ollama, RULE_RESPONSE_SCHEMA, validate_candidates
-)
+import os
+
+from stair_rule_extractor import _local_ollama, validate_candidates
 
 STATEMENT_SCHEMA = {
     "type": "object",
@@ -14,13 +14,31 @@ STATEMENT_SCHEMA = {
             "evidence_id": {"type": "string"},
             "quote": {"type": "string"},
             "interpretation": {"type": "string"},
-            "kind": {"type": "string", "enum": ["permission", "prohibition", "condition", "exception", "other"]}
+            "kind": {"type": "string", "enum": ["permission", "prohibition", "condition", "exception", "other"]},
         },
         "required": ["evidence_id", "quote", "interpretation", "kind"],
-        "additionalProperties": False
+        "additionalProperties": False,
     }}},
     "required": ["statements"],
-    "additionalProperties": False
+    "additionalProperties": False,
+}
+
+# Stage two only refers to a statement ID. It must not generate or rewrite citations.
+FORMALIZATION_SCHEMA = {
+    "type": "object",
+    "properties": {"rules": {"type": "array", "maxItems": 12, "items": {
+        "type": "object",
+        "properties": {
+            "statement_id": {"type": "string"},
+            "id": {"type": "string"},
+            "if": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string"}},
+            "then": {"type": "string"},
+        },
+        "required": ["statement_id", "id", "if", "then"],
+        "additionalProperties": False,
+    }}},
+    "required": ["rules"],
+    "additionalProperties": False,
 }
 
 
@@ -28,15 +46,15 @@ def _call(messages, schema, key):
     return _local_ollama(
         messages, url="http://127.0.0.1:11434/api/chat",
         model=os.environ.get("STAIR_EXTRACTOR_MODEL", "qwen2.5-coder:14b"),
-        timeout=60, schema=schema, required_key=key
+        timeout=60, schema=schema, required_key=key,
     )
 
 
 def extract_two_stage(evidence, *, caller=None):
-    """Return proposed structured rules and aggregate diagnostics.
+    """Return provisional rules with source-owned quotes; never semantic approval.
 
-    caller(messages, schema, key) can be injected for tests. Stage two only
-    gets stage-one statements that have valid literal source quotes.
+    caller(messages, schema, key) can be injected for tests.
+    Only exact, source-anchored first-stage statements reach formalization.
     """
     if not isinstance(evidence, list) or not evidence:
         raise ValueError("Expected nonempty evidence list")
@@ -53,7 +71,7 @@ def extract_two_stage(evidence, *, caller=None):
             "a short English interpretation and a kind. Preserve negation and scope. "
             "No unstated assumptions. If none, output an empty statements list."
         )},
-        {"role": "user", "content": json.dumps(passages, ensure_ascii=False)}
+        {"role": "user", "content": json.dumps(passages, ensure_ascii=False)},
     ]
     raw = call(messages, STATEMENT_SCHEMA, "statements")
     if not isinstance(raw, dict) or not isinstance(raw.get("statements"), list):
@@ -66,62 +84,87 @@ def extract_two_stage(evidence, *, caller=None):
         interpretation = item.get("interpretation")
         if (isinstance(sid, str) and sid in lookup and isinstance(quote, str)
                 and 12 <= len(quote) <= 800
-                and quote in lookup[sid].get("text", "")
+                and quote in lookup[sid].get("text", "")[:1800]
                 and isinstance(interpretation, str) and interpretation.strip()
                 and item.get("kind") in {"permission", "prohibition", "condition", "exception", "other"}):
-            valid.append(item)
-    diagnostic = {"stage1_returned": len(raw["statements"]),
-                  "stage1_anchored": len(valid),
-                  "stage1_rejected": len(raw["statements"]) - len(valid),
-                  "stage2_returned": 0,
-                  "stage2_accepted": 0,
-                  "stage2_rejected": 0,
-                  "semantically_verified": False,
-                  "stage2_rejection_reasons": {"unanchored_quote": 0, "invalid_structure_or_provenance": 0},
-                  "stage1_unrepresented_count": 0,
-                  "stage1_unrepresented_indices": [],
-                  "stage1_unrepresented_kinds": [],
-                  "coverage_basis": "exact_quote_identity_only",
-                  "review_required": True}
+            valid.append({**item, "statement_id": f"P{len(valid) + 1:03d}"})
+
+    diagnostic = {
+        "stage1_returned": len(raw["statements"]),
+        "stage1_anchored": len(valid),
+        "stage1_rejected": len(raw["statements"]) - len(valid),
+        "stage2_returned": 0,
+        "stage2_accepted": 0,
+        "stage2_rejected": 0,
+        "stage2_rejection_reasons": {
+            "unknown_statement_id": 0,
+            "duplicate_statement_id": 0,
+            "invalid_structure_or_provenance": 0,
+        },
+        "stage1_unrepresented_count": 0,
+        "stage1_unrepresented_indices": [],
+        "stage1_unrepresented_kinds": [],
+        "coverage_basis": "stable_statement_id_only",
+        "review_required": True,
+        "semantically_verified": False,
+    }
     if not valid:
         return {"status": "stage1_empty_or_invalid", "diagnostic": diagnostic, "candidates": []}
+
+    statements = {v["statement_id"]: v for v in valid}
     second = [
         {"role": "system", "content": (
-            "Convert each provided tentative statement into a separate provisional Horn-style rule. "
-            "Use simple lowercase snake_case atom names, optionally prefixed ! for negation. "
-            "Return JSON with rules entries id, if (at least one condition atom), then, "
-            "evidence_id, quote. Reuse the EXACT evidence_id and quote from the input. "
-            "Do not introduce implications not stated. If not representable, omit the rule."
+            "Convert each input statement into one separate provisional Horn-style rule. "
+            "Return JSON rules containing exactly statement_id, id, if, then. "
+            "statement_id MUST exactly match an input statement_id. Do NOT output evidence_id "
+            "or quotes; the application securely attaches original provenance itself. "
+            "Use simple lowercase snake_case atoms, optionally prefixed ! for negation. "
+            "Do not invent implications or priorities. Omit rules that cannot be represented."
         )},
-        {"role": "user", "content": json.dumps(valid, ensure_ascii=False)}
+        {"role": "user", "content": json.dumps(valid, ensure_ascii=False)},
     ]
-    raw_rules = call(second, RULE_RESPONSE_SCHEMA, "rules")
+    raw_rules = call(second, FORMALIZATION_SCHEMA, "rules")
     if not isinstance(raw_rules, dict) or not isinstance(raw_rules.get("rules"), list):
         raise ValueError("Missing stage-two rules list")
     diagnostic["stage2_returned"] = len(raw_rules["rules"])
-    # The second model output must not be able to invent a quote from unrelated evidence.
-    anchors = {(v["evidence_id"], v["quote"]) for v in valid}
-    anchored = []
-    diagnostics_by_reason = {"unanchored_quote": 0, "invalid_structure_or_provenance": 0}
-    for rule in raw_rules["rules"]:
-        if not isinstance(rule, dict) or not isinstance(rule.get("evidence_id"), str) or not isinstance(rule.get("quote"), str) or (rule["evidence_id"], rule["quote"]) not in anchors:
-            diagnostics_by_reason["unanchored_quote"] += 1
+    reasons = diagnostic["stage2_rejection_reasons"]
+    accepted_ids = set()
+    seen_ids = set()
+    # Validate each proposal independently, while keeping source metadata immutable.
+    # Every statement can yield at most one accepted rule in this pilot.
+    candidate_rules = []
+    for raw_rule in raw_rules["rules"]:
+        statement_id = raw_rule.get("statement_id") if isinstance(raw_rule, dict) else None
+        if not isinstance(statement_id, str) or statement_id not in statements:
+            reasons["unknown_statement_id"] += 1
             continue
-        anchored.append(rule)
-    validated = validate_candidates({"rules": anchored}, evidence)
-    diagnostics_by_reason["invalid_structure_or_provenance"] = validated["rejected_count"]
+        if statement_id in seen_ids:
+            reasons["duplicate_statement_id"] += 1
+            continue
+        seen_ids.add(statement_id)
+        source = statements[statement_id]
+        attached = {
+            "id": raw_rule.get("id"),
+            "if": raw_rule.get("if"),
+            "then": raw_rule.get("then"),
+            "evidence_id": source["evidence_id"],
+            "quote": source["quote"],
+        }
+        candidate_rules.append((statement_id, attached))
+
+    # Validate as a batch to preserve duplicate rule-ID detection.
+    validated = validate_candidates({"rules": [rule for _, rule in candidate_rules]}, evidence)
+    accepted_rule_ids = {r["id"] for r in validated["candidates"]}
+    for statement_id, rule in candidate_rules:
+        if rule["id"] in accepted_rule_ids:
+            accepted_ids.add(statement_id)
+    reasons["invalid_structure_or_provenance"] = validated["rejected_count"]
     diagnostic["stage2_accepted"] = validated["candidate_count"]
     diagnostic["stage2_rejected"] = diagnostic["stage2_returned"] - validated["candidate_count"]
-    diagnostic["stage2_rejection_reasons"] = diagnostics_by_reason
-    # This checks quote identity only: it does NOT establish semantic coverage.
-    covered = {(r["source"], r["quote"]) for r in validated["candidates"]}
-    missing = [i for i, statement in enumerate(valid, 1)
-               if (statement["evidence_id"], statement["quote"]) not in covered]
+    missing = [i for i, v in enumerate(valid, 1) if v["statement_id"] not in accepted_ids]
     diagnostic["stage1_unrepresented_count"] = len(missing)
     diagnostic["stage1_unrepresented_indices"] = missing
     diagnostic["stage1_unrepresented_kinds"] = [valid[i - 1]["kind"] for i in missing]
-    diagnostic["coverage_basis"] = "exact_quote_identity_only"
-    diagnostic["review_required"] = True
     return {"status": "candidates_only", "diagnostic": diagnostic,
             "candidates": validated["candidates"]}
 
@@ -140,13 +183,14 @@ def main():
     if len(evidence) != 1:
         parser.error("Expected exactly one matching STAIR source")
     result = extract_two_stage(evidence)
-    # No protected passages or quotes in stdout.
-    print(json.dumps({"status": result["status"], "diagnostic": result["diagnostic"],
-                      "rule_atoms": [{"if": r["if"], "then": r["then"],
-                                      "source": r["source"]}
-                                     for r in result["candidates"]],
-                      "automatic_approval": False},
-                     ensure_ascii=False, indent=2))
+    # No protected passage or quote on stdout.
+    print(json.dumps({
+        "status": result["status"],
+        "diagnostic": result["diagnostic"],
+        "rule_atoms": [{"if": r["if"], "then": r["then"], "source": r["source"]}
+                       for r in result["candidates"]],
+        "automatic_approval": False,
+    }, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
