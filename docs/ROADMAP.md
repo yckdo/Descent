@@ -32,8 +32,8 @@ STAIR et Qwen local permettent d'interroger le manuel initial, avec des référe
 - [x] Moteur logique expérimental.
 - [x] Extraction Qwen en deux étapes.
 - [x] Contrôles de citations et diagnostic des pertes.
-- [ ] Donner un identifiant stable à chaque proposition et réattacher sa citation sans recopie.
-- [ ] Vérifier permissions, interdictions et exceptions préservées.
+- [x] Donner un identifiant stable à chaque proposition et réattacher sa citation sans recopie (tests automatisés).
+- [ ] Vérifier sur le corpus réel que permissions, interdictions et exceptions sont préservées.
 - [ ] Détecter contradictions et omissions.
 - [ ] Étendre les tests de non-régression.
 
@@ -132,7 +132,7 @@ Aucune fusion ni aucun déploiement sans accord explicite. Données privées con
 
 **Documentation :** validation des cinq documents, publication sur `feature/stair-reasoning-integration`, retrait des six anciennes fiches redondantes, vérification des liens. L'historique Git conserve les anciens documents.
 
-**Développement suivant :** corriger l'identité/citation entre les deux étapes de `stair_two_stage_extractor.py`, tester localement sur S002, puis poursuivre les lots selon leurs dépendances.
+**Développement suivant :** l'identité et la citation entre les deux étapes ont été corrigées dans `stair_two_stage_extractor.py` et couvertes par des tests unitaires. **À faire :** tester localement avec Qwen sur S002, examiner les omissions et exceptions, puis poursuivre les lots selon leurs dépendances.
 
 ## 7. Définition de « terminé »
 
