@@ -139,5 +139,74 @@ class TwoStageTests(unittest.TestCase):
         self.assertEqual(result["candidates"][0]["quote"], QUOTE)
 
 
+    def test_expected_kinds_detect_stage_one_omission(self):
+        result = extract_two_stage(
+            E, caller=caller_for([STATEMENT], [RULE]),
+            expected_kinds=("permission", "prohibition"),
+        )
+        diag = result["diagnostic"]
+        self.assertEqual(diag["missing_expected_stage1_kinds"], ["prohibition"])
+        self.assertEqual(diag["missing_expected_stage2_kinds"], ["prohibition"])
+        self.assertFalse(diag["expected_kind_coverage"])
+        self.assertFalse(diag["semantically_verified"])
+
+    def test_expected_kinds_detect_stage_two_omission(self):
+        prohibition = dict(STATEMENT, quote=OTHER_QUOTE,
+                           interpretation="Cannot end there", kind="prohibition")
+        result = extract_two_stage(
+            E, caller=caller_for([STATEMENT, prohibition], [RULE]),
+            expected_kinds=("permission", "prohibition"),
+        )
+        diag = result["diagnostic"]
+        self.assertEqual(diag["missing_expected_stage1_kinds"], [])
+        self.assertEqual(diag["missing_expected_stage2_kinds"], ["prohibition"])
+        self.assertFalse(diag["expected_kind_coverage"])
+
+    def test_expected_kinds_complete_is_not_semantic_approval(self):
+        prohibition = dict(STATEMENT, quote=OTHER_QUOTE,
+                           interpretation="Cannot end there", kind="prohibition")
+        prohibition_rule = dict(RULE, statement_id="P002", id="rule2",
+                                then="cannot_end")
+        result = extract_two_stage(
+            E, caller=caller_for([STATEMENT, prohibition], [RULE, prohibition_rule]),
+            expected_kinds=("permission", "prohibition"),
+        )
+        diag = result["diagnostic"]
+        self.assertEqual(diag["missing_expected_stage1_kinds"], [])
+        self.assertEqual(diag["missing_expected_stage2_kinds"], [])
+        self.assertTrue(diag["expected_kind_coverage"])
+        self.assertFalse(diag["semantically_verified"])
+        self.assertTrue(diag["review_required"])
+
+    def test_empty_stage_one_flags_both_expected_kinds(self):
+        result = extract_two_stage(
+            E, caller=lambda messages, schema, key: {"statements": []},
+            expected_kinds=("permission", "prohibition"),
+        )
+        self.assertEqual(
+            result["diagnostic"]["missing_expected_stage1_kinds"],
+            ["permission", "prohibition"],
+        )
+        self.assertFalse(result["diagnostic"]["expected_kind_coverage"])
+
+    def test_duplicate_and_unknown_expected_kinds_rejected(self):
+        for expected in [("permission", "permission"), ("unsupported",), "permission"]:
+            with self.subTest(expected=expected):
+                with self.assertRaises(ValueError):
+                    extract_two_stage(E, caller=caller_for([], []),
+                                      expected_kinds=expected)
+
+    def test_expected_kind_diagnostics_contain_no_manual_text(self):
+        prohibition = dict(STATEMENT, quote=OTHER_QUOTE,
+                           interpretation="Cannot end there", kind="prohibition")
+        result = extract_two_stage(
+            E, caller=caller_for([STATEMENT, prohibition], [RULE]),
+            expected_kinds=("permission", "prohibition"),
+        )
+        diagnostic = json.dumps(result["diagnostic"])
+        self.assertNotIn(QUOTE, diagnostic)
+        self.assertNotIn(OTHER_QUOTE, diagnostic)
+
+
 if __name__ == "__main__":
     unittest.main()
