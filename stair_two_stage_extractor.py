@@ -1,6 +1,7 @@
 """Experimental two-stage STAIR extraction. Candidate rules are NEVER automatically approved."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 
@@ -50,12 +51,26 @@ def _call(messages, schema, key):
     )
 
 
-def extract_two_stage(evidence, *, caller=None):
+def _count_kinds(statements):
+    """Count categories only; no quotes or private source text in diagnostics."""
+    counts = {}
+    for statement in statements:
+        kind = statement["kind"]
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def extract_two_stage(evidence, *, caller=None, expected_kinds=()):
     """Return provisional rules with source-owned quotes; never semantic approval.
 
     caller(messages, schema, key) can be injected for tests.
     Only exact, source-anchored first-stage statements reach formalization.
     """
+    allowed_expectations = {"permission", "prohibition", "condition", "exception"}
+    if (not isinstance(expected_kinds, (tuple, list))
+            or any(kind not in allowed_expectations for kind in expected_kinds)
+            or len(set(expected_kinds)) != len(expected_kinds)):
+        raise ValueError("Invalid expected statement kinds")
     if not isinstance(evidence, list) or not evidence:
         raise ValueError("Expected nonempty evidence list")
     lookup = {e["id"]: e for e in evidence if isinstance(e, dict) and isinstance(e.get("id"), str)}
@@ -93,6 +108,14 @@ def extract_two_stage(evidence, *, caller=None):
         "stage1_returned": len(raw["statements"]),
         "stage1_anchored": len(valid),
         "stage1_rejected": len(raw["statements"]) - len(valid),
+        "stage1_kind_counts": _count_kinds(valid),
+        "stage2_kind_counts": {},
+        "expected_kinds": list(expected_kinds),
+        "missing_expected_stage1_kinds": [
+            kind for kind in expected_kinds if kind not in _count_kinds(valid)
+        ],
+        "missing_expected_stage2_kinds": list(expected_kinds),
+        "expected_kind_coverage": None if not expected_kinds else False,
         "stage2_returned": 0,
         "stage2_accepted": 0,
         "stage2_rejected": 0,
@@ -172,6 +195,19 @@ def extract_two_stage(evidence, *, caller=None):
     diagnostic["stage1_unrepresented_count"] = len(missing)
     diagnostic["stage1_unrepresented_indices"] = missing
     diagnostic["stage1_unrepresented_kinds"] = [valid[i - 1]["kind"] for i in missing]
+    accepted_statements = [
+        statements[statement_id] for statement_id in accepted_ids
+    ]
+    diagnostic["stage2_kind_counts"] = _count_kinds(accepted_statements)
+    diagnostic["missing_expected_stage2_kinds"] = [
+        kind for kind in expected_kinds
+        if kind not in diagnostic["stage2_kind_counts"]
+    ]
+    if expected_kinds:
+        diagnostic["expected_kind_coverage"] = not (
+            diagnostic["missing_expected_stage1_kinds"]
+            or diagnostic["missing_expected_stage2_kinds"]
+        )
     return {"status": "candidates_only", "diagnostic": diagnostic,
             "candidates": validated["candidates"]}
 
@@ -182,6 +218,10 @@ def main():
     parser = argparse.ArgumentParser(description="Local-only STAIR two-stage extraction diagnostic")
     parser.add_argument("draft", type=Path)
     parser.add_argument("--source", default="S002")
+    parser.add_argument(
+        "--check-s002", action="store_true",
+        help="Check presence of permission AND prohibition; not semantic approval",
+    )
     args = parser.parse_args()
     if args.draft.stat().st_size > 2_000_000:
         parser.error("Draft exceeds 2 MB")
@@ -189,7 +229,18 @@ def main():
     evidence = [e for e in case["evidence"] if e["id"] == args.source]
     if len(evidence) != 1:
         parser.error("Expected exactly one matching STAIR source")
-    result = extract_two_stage(evidence)
+    expected_kinds = ()
+    if args.check_s002:
+        item = evidence[0]
+        expected_hash = case.get("evidence_hashes", {}).get("S002")
+        if (args.source != "S002" or case.get("case_id") != "descent_sec_0047"
+                or item.get("page") != 8
+                or "#/texts/263" not in item.get("source_refs", [])
+                or not isinstance(item.get("text"), str)
+                or expected_hash != hashlib.sha256(item["text"].encode("utf-8")).hexdigest()):
+            parser.error("S002 source identity, page, Docling ref or fingerprint mismatch")
+        expected_kinds = ("permission", "prohibition")
+    result = extract_two_stage(evidence, expected_kinds=expected_kinds)
     # No protected passage or quote on stdout.
     print(json.dumps({
         "status": result["status"],
