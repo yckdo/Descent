@@ -33,6 +33,7 @@ STAIR et Qwen local permettent d'interroger le manuel initial, avec des référe
 - [x] Extraction Qwen en deux étapes.
 - [x] Contrôles de citations et diagnostic des pertes.
 - [x] Donner un identifiant stable à chaque proposition et réattacher sa citation sans recopie (tests automatisés).
+- [x] Signaler pour S002 les catégories permission/interdiction perdues aux étapes 1 ou 2 (tests automatisés, sans approbation sémantique).
 - [ ] Vérifier sur le corpus réel que permissions, interdictions et exceptions sont préservées.
 - [ ] Détecter contradictions et omissions.
 - [ ] Étendre les tests de non-régression.
