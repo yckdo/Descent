@@ -12,7 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-ATOM = re.compile(r"!?[a-z][a-z0-9_]{0,79}\\Z")
+ATOM = re.compile(r"!?[a-z][a-z0-9_]{0,79}\Z")
 REQUIRED_ACTIONS = (
     "figure_can_move_through_friendly_figure",
     "!figure_can_end_movement_in_same_space",
