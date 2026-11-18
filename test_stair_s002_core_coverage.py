@@ -20,6 +20,7 @@ class CoreCoverageTests(unittest.TestCase):
         r = report(ref["expected_actions"])
         self.assertEqual(r["core_expected"], 8)
         self.assertEqual(r["core_missing"], 0)
+        self.assertEqual(r["core_unexpected"], 0)
         self.assertEqual(len(r["diagonal_scope_examples"]), 2)
         self.assertFalse(r["semantically_verified"])
 
