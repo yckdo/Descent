@@ -1,0 +1,37 @@
+name: STAIR shadow unit tests
+on:
+  push:
+    branches:
+      - feature/stair-reasoning-integration
+  pull_request:
+    paths:
+      - 'stair_reasoner.py'
+      - 'stair_shadow.py'
+      - 'test_stair_reasoning.py'
+      - 'stair_rule_extractor.py'
+      - 'test_stair_rule_extractor.py'
+      - 'stair_fidelity_gate.py'
+      - 'test_stair_fidelity_gate.py'
+      - 'stair_semantic_benchmark.py'
+      - 'test_stair_semantic_benchmark.py'
+      - 'prepare_stair_gold_drafts.py'
+      - 'test_prepare_stair_gold_drafts.py'
+      - 'evaluate_stair_s002.py'
+      - 'test_evaluate_stair_s002.py'
+      - 'test_stair_ollama_schema.py'
+      - 'stair_two_stage_extractor.py'
+      - 'test_stair_two_stage_extractor.py'
+      - '.github/workflows/stair-shadow-tests.yml'
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest -v test_stair_reasoning test_stair_rule_extractor test_stair_fidelity_gate test_stair_semantic_benchmark test_prepare_stair_gold_drafts test_evaluate_stair_s002 test_stair_ollama_schema test_stair_two_stage_extractor
+      - run: python -m py_compile stair_reasoner.py stair_shadow.py stair_rule_extractor.py stair_fidelity_gate.py stair_semantic_benchmark.py prepare_stair_gold_drafts.py evaluate_stair_s002.py stair_two_stage_extractor.py web_app.py
+      - run: python stair_shadow.py stair_shadow_example.json --enable

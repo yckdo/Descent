@@ -15,6 +15,8 @@ from validate_stair_evidence import audit_evidence
 from reviewed_stair_answers import get_reviewed_answer, normalize_question
 from prepare_stair_open_chat import prepare_open_chat
 from audit_stair_generic import audit_capture, load_json
+from stair_shadow import compare_observation
+from stair_rule_extractor import observe_extraction
 
 
 ROOT = Path(__file__).resolve().parent
@@ -220,6 +222,27 @@ def ask(request: QuestionRequest):
                 "source_ids": point["source_ids"],
                 "pdf_pages": pages,
             })
+
+        # Observation facultative : aucune donnée de réponse n'est modifiée.
+        # Pas encore d'extracteur de règles validé : aucune preuve logique
+        # n'est inventée à partir des passages ou de la réponse du LLM.
+        # Ne pas journaliser les textes, questions ou sources.
+        observation = compare_observation("", None)
+        extraction = observe_extraction(evidence)
+        if observation["shadow"]["mode"] == "shadow":
+            print(
+                "[Descent V2] STAIR shadow:",
+                observation["shadow"]["status"],
+                flush=True,
+            )
+        if extraction["status"] != "disabled":
+            print(
+                "[Descent V2] STAIR extraction:",
+                extraction["status"],
+                "candidates=",
+                extraction.get("candidate_count", 0),
+                flush=True,
+            )
 
         return {
             "question": question,
