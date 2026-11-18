@@ -35,7 +35,8 @@ def audit_coverage(classification, reference):
     expected_core = Counter(signature(x) for x in core)
     matches = actual & expected_core
     missing = expected_core - actual
-    extra = actual - expected_core
+    expected_examples = Counter(signature(x) for x in examples)
+    extra = actual - expected_core - expected_examples
     # Examples are explicit scope details, not independent core rules.
     detail_rows = []
     for x in examples:
